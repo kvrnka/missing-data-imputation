@@ -1,0 +1,23 @@
+# === Data Manipulation ===
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# === Machine Learning & Imputation ===
+scikit-learn>=1.3.0
+# для генерации MCAR, MAR, MNAR
+pyampute>=0.0.1  
+
+# === Statistics & Time Series (для научника) ===
+statsmodels>=0.14.0
+
+# === Visualization ===
+matplotlib>=3.7.0
+seaborn>=0.12.0
+missingno>=0.5.0
+
+# === Utilities ===
+tqdm>=4.65.0
+jupyter>=1.0.0
+openpyxl>=3.1.0
+comet-ml>=3.35
