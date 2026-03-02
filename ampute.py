@@ -1,45 +1,65 @@
-# файл с функциями для генерации пропусков
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import root_mean_squared_error
 
-
-def introduce_mcar(df, missing_rate=0.1, columns=None, random_state=None):
+def produce_na(data, target_col, dependency_col=None, mechanism='MCAR', ratio=0.2):
     """
-    Вносит пропуски по механизму MCAR в DataFrame.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Исходный датасет.
-    missing_rate : float
-        Доля пропусков (от 0 до 1).
-    columns : list or None
-        Список столбцов, в которых нужно создать пропуски.
-        Если None — пропуски создаются во всех столбцах.
-    random_state : int or None
-        Seed для воспроизводимости.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Новый DataFrame с пропусками.
+    Генерирует пропуски в столбце target_col.
+    
+    data: DataFrame
+    target_col: имя столбца, где будут дырки
+    dependency_col: имя столбца, от которого зависит пропуск (для MAR)
+    mechanism: 'MCAR', 'MAR', 'MNAR'
+    ratio: доля пропусков (0.2 = 20%)
     """
-    if not 0 <= missing_rate <= 1:
-        raise ValueError("missing_rate должен быть в диапазоне [0, 1].")
+    df = data.copy()
+    n = len(df)
+    n_miss = int(n * ratio) # сколько точно значений стереть
+    
+    # инициализируем маску (False = не стирать)
+    mask = np.zeros(n, dtype=bool)
 
-    df_mcar = df.copy()
-    rng = np.random.default_rng(random_state)
+    # mcar: просто случайные индексы
+    if mechanism == 'MCAR':
+        missing_indices = np.random.choice(n, n_miss, replace=False)
+        mask[missing_indices] = True
 
-    if columns is None:
-        columns = df_mcar.columns
+    # mnar: вероятность зависит от самого значения
+    elif mechanism == 'MNAR':
+        # чем больше значение, тем больше вероятность пропуска
+        # (имитация: богатые скрывают доход)
+        values = df[target_col].values
+        
+        # нормируем вероятность (добавляем немного шума, чтобы не было жесткой отсечки)
+        probs = values + np.random.normal(0, values.std() * 0.1, size=n)
+        
+        # получаем индексы n_miss самых больших значений probabilities
+        missing_indices = np.argsort(probs)[-n_miss:]
+        mask[missing_indices] = True
+
+    # mar: вероятность зависит от другого столбца
+    elif mechanism == 'MAR':
+        if dependency_col is None:
+            raise ValueError("Для MAR нужно указать dependency_col!")
+            
+        # берем значения соседнего столбца
+        dep_values = df[dependency_col].values
+        
+        # чем выше значение в dependency_col, тем выше шанс пропажи в target_col
+        # добавляем шум для реалистичности
+        probs = dep_values + np.random.normal(0, dep_values.std() * 0.1, size=n)
+        
+        missing_indices = np.argsort(probs)[-n_miss:]
+        mask[missing_indices] = True
+        
     else:
-        missing_cols = set(columns) - set(df_mcar.columns)
-        if missing_cols:
-            raise ValueError(f"В датасете нет столбцов: {missing_cols}")
+        raise ValueError("Неизвестный механизм")
 
-    # Генерируем маску только для выбранных столбцов
-    mask = rng.uniform(size=(df_mcar.shape[0], len(columns))) < missing_rate
+    # вставляем пропуски
+    df.loc[mask, target_col] = np.nan
+    
+    return df, mask
 
-    df_mcar.loc[:, columns] = df_mcar.loc[:, columns].mask(mask)
-
-    return df_mcar
+def get_rmse(y_true, y_pred):
+    return root_mean_squared_error(y_true, y_pred, squared=False)

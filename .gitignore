@@ -1,0 +1,28 @@
+# логи
+*.log
+
+# env файлы (секреты!)
+.env
+.env.local
+
+# системные файлы
+.DS_Store
+Thumbs.db
+
+# vscode настройки (если не хочешь шарить свои)
+.vscode/
+
+# python
+__pycache__/
+*.pyc
+
+# виртуальное окружение
+.venv/
+.env/
+
+COMET_API_KEY.zshrc
+dont_be_scared.ipynb
+
+# сборка
+dist/
+build/
