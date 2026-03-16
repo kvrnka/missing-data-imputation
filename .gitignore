@@ -26,3 +26,5 @@ dont_be_scared.ipynb
 # сборка
 dist/
 build/
+
+results_backup_housing.xlsx
