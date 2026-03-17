@@ -47,13 +47,14 @@ def knn_imputation(df_incomplete, n_neighbors=5):
 IMPUTATION_METHODS = {
     "Simple": simple_imputation,
     "KNN": knn_imputation,
+    # limit_direction='both' позволяет заполнять пропуски в начале и в конце ряда, а не только между значениями
+    "LinearInterpolation": lambda df, method: df.interpolate(method=method, limit_direction='both')
 }
 
-
-def imputation(df_incomplete, method='Simple', **kwargs):
+def imputation(df_incomplete, algo='Simple', **kwargs):
     # TODO сделать описание функции
-    if method not in IMPUTATION_METHODS:
-        raise ValueError(f"Unknown mechanism: {method}")
+    if algo not in IMPUTATION_METHODS:
+        raise ValueError(f"Unknown mechanism: {algo}")
     
-    return IMPUTATION_METHODS[method](df_incomplete, **kwargs)
+    return IMPUTATION_METHODS[algo](df_incomplete, **kwargs)
     
