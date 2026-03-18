@@ -1,6 +1,10 @@
 import pandas as pd
 
 from sklearn.impute import SimpleImputer, KNNImputer
+
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import root_mean_squared_error
 
@@ -44,9 +48,16 @@ def knn_imputation(df_incomplete, n_neighbors=5):
     return pd.DataFrame(data_imputed, columns=df_incomplete.columns, index=df_incomplete.index)
 
 
+def mice_imputation(df, random_state=42, **kwargs):
+    imputer = IterativeImputer(random_state=random_state, **kwargs)
+    imputed_array = imputer.fit_transform(df)
+    return pd.DataFrame(imputed_array, columns=df.columns, index=df.index)
+
+
 IMPUTATION_METHODS = {
     "Simple": simple_imputation,
     "KNN": knn_imputation,
+    "MICE": mice_imputation,
     # limit_direction='both' позволяет заполнять пропуски в начале и в конце ряда, а не только между значениями
     "LinearInterpolation": lambda df, method: df.interpolate(method=method, limit_direction='both')
 }
