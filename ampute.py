@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
-from sklearn.metrics import root_mean_squared_error
 
-def produce_na(data, target_col, dependency_col=None, mechanism='MCAR', ratio=0.2, random_state=42):
+
+def generate_missing_data(data, columns_config, mechanism='MCAR', ratio=0.2, random_state=42):
     """
     Генерирует пропуски в столбце target_col.
     
@@ -17,62 +17,57 @@ def produce_na(data, target_col, dependency_col=None, mechanism='MCAR', ratio=0.
     df = data.copy()
     n = len(df)
     n_miss = int(n * ratio) # сколько точно значений стереть
-    
-    # инициализируем маску (False = не стирать)
-    mask = np.zeros(n, dtype=bool)
+    full_mask = pd.DataFrame(False, index=df.index, columns=df.columns)
 
-    # mcar: просто случайные индексы
-    if mechanism == 'MCAR':
-        missing_indices = np.random.choice(n, n_miss, replace=False)
-        mask[missing_indices] = True
+    for col_dict in columns_config:
+        target_col = list(col_dict.keys())[0]
+        dependency_col = list(col_dict.values())[0] if mechanism == "MAR" else None
 
-    # mar: вероятность зависит от другого столбца
-    elif mechanism == 'MAR':
-        if dependency_col is None:
-            raise ValueError("Для MAR нужно указать dependency_col!")
-            # берём зависимый столбец
-        dep_values = df[dependency_col]
-        
-        # если категориальный -> кодируем
-        if dep_values.dtype == 'object':
-            le = LabelEncoder()
-            dep_values = le.fit_transform(dep_values.astype(str))
-        else:
-            dep_values = dep_values.values
-        
-        # нормализация (0–1)
-        dep_min = np.min(dep_values)
-        dep_max = np.max(dep_values)
-        
-        # защита от деления на 0
-        if dep_max - dep_min == 0:
-            probs = np.ones(n) / n
-        else:
-            norm_dep = (dep_values - dep_min) / (dep_max - dep_min)
-            
-            # добавим небольшой шум
-            noise = np.random.normal(0, 0.05, size=n)
-            norm_dep = norm_dep + noise
-            
-            # убираем отрицательные значения
-            norm_dep = np.clip(norm_dep, 0, None)
-            
-            # превращаем в вероятности
-            if norm_dep.sum() == 0:
+        mask = np.zeros(n, dtype=bool)
+
+        # --- MCAR ---
+        if mechanism == 'MCAR':
+            missing_indices = np.random.choice(n, n_miss, replace=False)
+            mask[missing_indices] = True
+
+        # --- MAR ---
+        elif mechanism == 'MAR':
+            if dependency_col is None:
+                raise ValueError("Для MAR нужен dependency_col")
+
+            dep_values = df[dependency_col]
+
+            # кодируем категории
+            if dep_values.dtype in ['object', 'string']:
+                categories = dep_values.astype(str)
+                unique_vals = categories.unique()
+                weights = dict(zip(unique_vals, np.random.rand(len(unique_vals))))
+                dep_values = categories.map(weights).values
+            else:
+                dep_values = dep_values.values
+
+            # нормализация
+            dep_min, dep_max = dep_values.min(), dep_values.max()
+
+            if dep_max - dep_min == 0:
                 probs = np.ones(n) / n
             else:
-                probs = norm_dep / norm_dep.sum()
-        
-        # выбираем индексы с вероятностями
-        mask = np.random.choice(n, size=n_miss, replace=False, p=probs)
-        
-    else:
-        raise ValueError("Неизвестный механизм")
+                norm_dep = (dep_values - dep_min) / (dep_max - dep_min)
 
-    # вставляем пропуски
-    df.loc[mask, target_col] = np.nan
-    
-    return df, mask
+                # шум
+                norm_dep += np.random.normal(0, 0.05, size=n)
+                norm_dep = np.clip(norm_dep, 0, None)
 
-def get_rmse(y_true, y_pred):
-    return root_mean_squared_error(y_true, y_pred, squared=False)
+                probs = norm_dep / norm_dep.sum() if norm_dep.sum() > 0 else np.ones(n) / n
+
+            missing_indices = np.random.choice(n, size=n_miss, replace=False, p=probs)
+            mask[missing_indices] = True
+
+        else:
+            raise ValueError("Unknown mechanism")
+
+        # применяем пропуски
+        df.loc[mask, target_col] = np.nan
+        full_mask[target_col] = mask
+
+    return df, full_mask

@@ -1,65 +1,132 @@
 import pandas as pd
+import numpy as np
 
 from sklearn.impute import SimpleImputer, KNNImputer
 
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
+from fancyimpute import IterativeImputer
 
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, OrdinalEncoder
 from sklearn.metrics import root_mean_squared_error
 
-# from sklearn.preprocessing import OrdinalEncoder
 
-# TODO сразу в функции добавить encoder
-
-def get_rmse(y_true, y_pred):
-    return root_mean_squared_error(y_true, y_pred)
+# def get_rmse(y_true, y_pred):
+#     return root_mean_squared_error(y_true, y_pred)
 
 
-def simple_imputation(df_incomplete, strategy = 'mean'):
+def simple_imputation(df_incomplete, num_strategy='mean'):
     """
-    Заполняет пропуски простой статистикой.
-    strategy: 'mean' (среднее) или 'median' (медиана)
+    Заполняет пропуски в датафрейме.
+    
+    Числовые колонки: num_strategy ('mean' или 'median')
+    Категориальные колонки: заполняются самым частым значением
     """
-    imputer = SimpleImputer(strategy=strategy)
-    data_imputed = imputer.fit_transform(df_incomplete)
-    return pd.DataFrame(data_imputed, columns=df_incomplete.columns, index=df_incomplete.index)
+    df = df_incomplete.copy()
+    
+    # определяем числовые и категориальные колонки
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    cat_cols = df.select_dtypes(include=['object', 'category', 'string']).columns
+    
+    # импутация числовых
+    if len(num_cols) > 0:
+        num_imputer = SimpleImputer(strategy=num_strategy)
+        df[num_cols] = num_imputer.fit_transform(df[num_cols])
+    
+    # импутация категориальных
+    if len(cat_cols) > 0:
+        cat_imputer = SimpleImputer(strategy='most_frequent')
+        df[cat_cols] = cat_imputer.fit_transform(df[cat_cols])
+    
+    return df
 
 
 def knn_imputation(df_incomplete, n_neighbors=5):
     """
-    Заполняет пропуски методом k-ближайших соседей.
-    Автоматически масштабирует данные перед работой.
+    Заполняет пропуски методом k-ближайших соседей для числовых и категориальных колонок.
+    Числовые колонки масштабируются перед KNN.
+    Категориальные колонки кодируются OrdinalEncoder.
     """
-    # масштабируем данные
-    scaler = StandardScaler()
-    df_scaled = df_incomplete.copy()
-    # fit_transform вернет массив, возвращаем обратно в DataFrame
-    df_scaled = pd.DataFrame(scaler.fit_transform(df_scaled), 
-                             columns=df_incomplete.columns, index=df_incomplete.index)
+    df = df_incomplete.copy()
     
-    # запускаем KNN
+    # разделяем числовые и категориальные
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    cat_cols = df.select_dtypes(include=['object', 'category', 'string']).columns
+    
+    # числовые колонки
+    if len(num_cols) > 0:
+        scaler = StandardScaler()
+        num_scaled = pd.DataFrame(scaler.fit_transform(df[num_cols]),
+                                  columns=num_cols, index=df.index)
+    else:
+        num_scaled = pd.DataFrame(index=df.index)
+    
+    # категориальные колонки
+    if len(cat_cols) > 0:
+        enc = OrdinalEncoder()
+        cat_encoded = pd.DataFrame(enc.fit_transform(df[cat_cols].astype(str)),
+                                   columns=cat_cols, index=df.index)
+    else:
+        cat_encoded = pd.DataFrame(index=df.index)
+    
+    # объединяем все колонки в один датафрейм для KNN
+    df_knn_input = pd.concat([num_scaled, cat_encoded], axis=1)
+    
+    # KNN Imputation
     imputer = KNNImputer(n_neighbors=n_neighbors)
-    data_imputed_scaled = imputer.fit_transform(df_scaled)
+    df_imputed_array = imputer.fit_transform(df_knn_input)
     
-    # возвращаем масштаб обратно
-    data_imputed = scaler.inverse_transform(data_imputed_scaled)
+    # разделяем обратно на числовые и категориальные
+    df_imputed = pd.DataFrame(df_imputed_array, columns=df_knn_input.columns, index=df.index)
     
-    return pd.DataFrame(data_imputed, columns=df_incomplete.columns, index=df_incomplete.index)
+    # обратное масштабирование числовых
+    if len(num_cols) > 0:
+        df_imputed[num_cols] = scaler.inverse_transform(df_imputed[num_cols])
+    
+    # обратное преобразование категориальных
+    if len(cat_cols) > 0:
+        df_imputed[cat_cols] = np.round(df_imputed[cat_cols])  # округляем до целых
+        df_imputed[cat_cols] = enc.inverse_transform(df_imputed[cat_cols])
+    
+    return df_imputed
 
 
-def mice_imputation(df, random_state=42, **kwargs):
+def mice_imputation(df_incomplete, random_state=42, **kwargs):
+    """
+    MICE-импутация для смешанных данных (числовые + категориальные)
+    df_incomplete: DataFrame с пропусками
+    random_state: для воспроизводимости
+    kwargs: любые дополнительные параметры для IterativeImputer
+    """
+    df = df_incomplete.copy()
+    
+    # разделяем типы
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    cat_cols = df.select_dtypes(include=['object', 'category', 'string']).columns
+    
+    # кодируем категориальные в числа
+    if len(cat_cols) > 0:
+        enc = OrdinalEncoder()
+        df[cat_cols] = enc.fit_transform(df[cat_cols].astype(str))
+    else:
+        enc = None
+    
+    # применяем IterativeImputer
     imputer = IterativeImputer(random_state=random_state, **kwargs)
     imputed_array = imputer.fit_transform(df)
-    return pd.DataFrame(imputed_array, columns=df.columns, index=df.index)
+    
+    df_imputed = pd.DataFrame(imputed_array, columns=df.columns, index=df.index)
+    
+    # обратное преобразование категориальные
+    if enc is not None and len(cat_cols) > 0:
+        df_imputed[cat_cols] = np.round(df_imputed[cat_cols])
+        df_imputed[cat_cols] = enc.inverse_transform(df_imputed[cat_cols])
+    
+    return df_imputed
 
 
 IMPUTATION_METHODS = {
     "Simple": simple_imputation,
     "KNN": knn_imputation,
     "MICE": mice_imputation,
-    # limit_direction='both' позволяет заполнять пропуски в начале и в конце ряда, а не только между значениями
-    "LinearInterpolation": lambda df, method: df.interpolate(method=method, limit_direction='both')
 }
 
 def imputation(df_incomplete, algo='Simple', **kwargs):
