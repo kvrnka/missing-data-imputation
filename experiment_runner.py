@@ -56,7 +56,7 @@ def run_single_experiment(df, df_incomplete, mask, method, params, columns):
     num_cols = df[columns].select_dtypes(include=[float, int]).columns
     cat_cols = df[columns].select_dtypes(include=['object', 'category', 'string']).columns
 
-    # rmse для числовых
+    # rmse и mae для числовых
     rmse_score = None
     if len(num_cols) > 0:
         rmse_list = []
@@ -77,57 +77,3 @@ def run_single_experiment(df, df_incomplete, mask, method, params, columns):
         acc_score = sum(acc_list) / len(acc_list)
 
     return rmse_score, acc_score, end - start
-
-
-def log_experiment(
-    experiment,
-    dataset_name,
-    mechanism,
-    method,
-    params,
-    ratio,
-    rmse=None,
-    acc=None,
-    time_taken=None
-):
-    """
-    Логирует эксперимент с понятными и структурированными именами метрик
-    """
-
-    # превращаем параметры в строку
-    params_str = "_".join([f"{k}={v}" for k, v in sorted(params.items())]) if params else "default"
-
-    # базовый префикс
-    base_name = (
-        f"{dataset_name}"
-        f"|mech={mechanism}"
-        f"|method={method}"
-        f"|params={params_str}"
-        f"|ratio={round(ratio, 2)}"
-    )
-
-    step = int(ratio * 100)
-
-    # RMSE
-    if rmse is not None:
-        experiment.log_metric(
-            name=f"{base_name}|metric=rmse",
-            value=rmse,
-            step=step
-        )
-
-    # Accuracy
-    if acc is not None:
-        experiment.log_metric(
-            name=f"{base_name}|metric=accuracy",
-            value=acc,
-            step=step
-        )
-
-    # Time
-    if time_taken is not None:
-        experiment.log_metric(
-            name=f"{base_name}|metric=time",
-            value=time_taken,
-            step=step
-        )
