@@ -1,12 +1,16 @@
 import time
-from imputation import imputation
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from sklearn.metrics import root_mean_squared_error
 
+from imputation import imputation
+
 
 def rmse_std(y_true, y_pred):
+    ''' 
+    Вычисляем RMSE между y_true и y_pred, предварительно стандартизируя их по y_true. 
+    Это позволяет оценить качество импутации относительно разброса истинных значений.'''
     mean = y_true.mean()
     std = y_true.std()
     
@@ -20,10 +24,17 @@ def rmse_std(y_true, y_pred):
 
 
 def cat_accuracy(y_true, y_pred):
+    ''' 
+    Вычисляем accuracy для категориальных данных. 
+    Сравниваем только те строки, где были пропуски (mask == True).
+    '''
     return (y_true == y_pred).mean()
 
 
 def load_dataset(name):
+    ''' 
+    Загружаем датасет по имени.
+    '''
     # путь относительно файла, где лежит функция
     base_path = Path(__file__).parent  # папка скрипта
     file_path = base_path / "data/processed" / name / "ground_truth.csv"

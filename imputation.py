@@ -1,11 +1,9 @@
 import pandas as pd
 import numpy as np
 import gower
-
-from sklearn.impute import SimpleImputer, KNNImputer
-
 from fancyimpute import IterativeImputer
 
+from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.preprocessing import StandardScaler, OrdinalEncoder, LabelEncoder, OneHotEncoder
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -140,7 +138,6 @@ def knn_imputation_gower(df_incomplete, n_neighbors=5):
     return df_imputed
 
 
-# TODO улучшить гибрид, чтобы knn для числовых смотрел и на категориальные
 def knn_imputation_hybrid(df_incomplete, n_neighbors=5):
     df = df_incomplete.copy()
 
@@ -150,7 +147,7 @@ def knn_imputation_hybrid(df_incomplete, n_neighbors=5):
 
     df_imputed = df.copy()
 
-    # ЧИСЛОВЫЕ — sklearn KNN
+    # ЧИСЛОВЫЕ: sklearn KNN
     if len(num_cols) > 0:
         scaler = StandardScaler()
         df_num = df[num_cols]
@@ -166,7 +163,7 @@ def knn_imputation_hybrid(df_incomplete, n_neighbors=5):
 
         df_imputed[num_cols] = scaler.inverse_transform(imputed_scaled)
 
-    # КАТЕГОРИИ — Gower KNN
+    # КАТЕГОРИИ: Gower KNN
     if len(cat_cols) > 0:
         df_for_gower = df.copy()
 
@@ -210,7 +207,6 @@ def knn_imputation_hybrid(df_incomplete, n_neighbors=5):
     return df_imputed
 
 
-# TODO сделать ранний критерий остановки для MICE
 def mice_imputation(df_incomplete, random_state=42, **kwargs):
     """
     MICE-импутация для смешанных данных (числовые + категориальные)
@@ -428,7 +424,11 @@ IMPUTATION_METHODS = {
 }
 
 def imputation(df_incomplete, algo='Simple', **kwargs):
-    # TODO сделать описание функции
+    ''' 
+    Выполняет импутацию данных с использованием указанного метода.
+    df_incomplete: DataFrame с пропусками
+    algo: строка с названием метода импутации
+    kwargs: дополнительные параметры для метода импутации'''
     if algo not in IMPUTATION_METHODS:
         raise ValueError(f"Unknown mechanism: {algo}")
     
