@@ -274,8 +274,20 @@ def mice_imputation_hybrid(df_incomplete, max_iter=10, random_state=42):
         ohe = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
         ohe.fit(df_raw[cat_cols].astype(str))
 
+    # маски исходно пропущенных значений для контроля сходимости
+    missing_masks = {col: df[col].isna() for col in df.columns}
+
+    # параметры ранней остановки
+    tol_num = 1e-3
+    tol_cat = 1e-3
+    min_iter = 2
+    patience = 2
+    no_improve_count = 0
+
     # MICE итерации
-    for _ in range(max_iter):
+    for iter_idx in range(max_iter):
+        prev_imputed = df_imputed.copy()
+
         for col in df.columns:
             missing_mask = df[col].isna()
             if missing_mask.sum() == 0:
@@ -331,6 +343,34 @@ def mice_imputation_hybrid(df_incomplete, max_iter=10, random_state=42):
 
             df_imputed.loc[missing_mask, col] = preds
 
+        # ранняя остановка: считаем изменение только на исходно пропущенных ячейках
+        num_deltas = []
+        for col in num_cols:
+            mask = missing_masks[col]
+            if mask.any():
+                prev_vals = prev_imputed.loc[mask, col].astype(float)
+                curr_vals = df_imputed.loc[mask, col].astype(float)
+                num_deltas.append(np.mean(np.abs(curr_vals - prev_vals)))
+
+        cat_deltas = []
+        for col in cat_cols:
+            mask = missing_masks[col]
+            if mask.any():
+                prev_vals = prev_imputed.loc[mask, col]
+                curr_vals = df_imputed.loc[mask, col]
+                cat_deltas.append((curr_vals != prev_vals).mean())
+
+        mean_num_delta = float(np.mean(num_deltas)) if len(num_deltas) > 0 else 0.0
+        mean_cat_delta = float(np.mean(cat_deltas)) if len(cat_deltas) > 0 else 0.0
+
+        if mean_num_delta < tol_num and mean_cat_delta < tol_cat:
+            no_improve_count += 1
+        else:
+            no_improve_count = 0
+
+        if iter_idx + 1 >= min_iter and no_improve_count >= patience:
+            break
+
     # обратное преобразование категориальных
     for col in cat_cols:
         le = encoders[col]
@@ -373,8 +413,20 @@ def missforest_imputation(df_incomplete, max_iter=10, n_estimators=100, random_s
         if not mode.empty:
             df_imputed[col] = df[col].fillna(mode.iloc[0])
 
+    # маски исходно пропущенных значений для контроля сходимости
+    missing_masks = {col: df[col].isna() for col in df.columns}
+
+    # параметры ранней остановки
+    tol_num = 1e-3
+    tol_cat = 1e-3
+    min_iter = 2
+    patience = 2
+    no_improve_count = 0
+
     # итерации MissForest
-    for _ in range(max_iter):
+    for iter_idx in range(max_iter):
+        prev_imputed = df_imputed.copy()
+
         for col in df.columns:
             missing_mask = df[col].isna()
             if missing_mask.sum() == 0:
@@ -403,6 +455,34 @@ def missforest_imputation(df_incomplete, max_iter=10, n_estimators=100, random_s
                 preds = model.predict(X_missing)
 
             df_imputed.loc[missing_mask, col] = preds
+
+        # ранняя остановка: считаем изменение только на исходно пропущенных ячейках
+        num_deltas = []
+        for col in num_cols:
+            mask = missing_masks[col]
+            if mask.any():
+                prev_vals = prev_imputed.loc[mask, col].astype(float)
+                curr_vals = df_imputed.loc[mask, col].astype(float)
+                num_deltas.append(np.mean(np.abs(curr_vals - prev_vals)))
+
+        cat_deltas = []
+        for col in cat_cols:
+            mask = missing_masks[col]
+            if mask.any():
+                prev_vals = prev_imputed.loc[mask, col]
+                curr_vals = df_imputed.loc[mask, col]
+                cat_deltas.append((curr_vals != prev_vals).mean())
+
+        mean_num_delta = float(np.mean(num_deltas)) if len(num_deltas) > 0 else 0.0
+        mean_cat_delta = float(np.mean(cat_deltas)) if len(cat_deltas) > 0 else 0.0
+
+        if mean_num_delta < tol_num and mean_cat_delta < tol_cat:
+            no_improve_count += 1
+        else:
+            no_improve_count = 0
+
+        if iter_idx + 1 >= min_iter and no_improve_count >= patience:
+            break
 
     # обратное преобразование категориальных
     for col in cat_cols:
